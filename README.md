@@ -207,18 +207,14 @@ Since Railway has no browser for the OAuth consent flow, you must generate `toke
 
 ### Step 4: Handle Credentials in Production
 
-For Railway, the `credentials.json` and `token.json` files need to be provided via environment variables since they can't be committed to git. Update `auth.py` to read from env vars by adding this pattern (optional enhancement):
+`auth.py` already handles this automatically — on startup it checks for two environment variables and writes the files to disk if they don't exist:
 
-```python
-import json
-import os
+| Variable | Value |
+|---|---|
+| `GOOGLE_CREDENTIALS_JSON` | Entire contents of `credentials.json` |
+| `GOOGLE_TOKEN_JSON` | Entire contents of `token.json` |
 
-# If GOOGLE_TOKEN_JSON env var is set, write it to token.json on startup
-token_env = os.getenv("GOOGLE_TOKEN_JSON")
-if token_env and not os.path.exists("token.json"):
-    with open("token.json", "w") as f:
-        f.write(token_env)
-```
+Set both in your Railway **Variables** tab. No manual code changes needed.
 
 ### Step 5: Deploy
 

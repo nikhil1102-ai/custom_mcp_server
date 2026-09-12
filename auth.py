@@ -41,6 +41,24 @@ TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.jso
 
 
 # ---------------------------------------------------------------------------
+# Production bootstrap — write credential files from environment variables
+# (used on Railway / other headless deployments where files are gitignored)
+# ---------------------------------------------------------------------------
+
+_creds_env = os.getenv("GOOGLE_CREDENTIALS_JSON")
+if _creds_env and not os.path.exists(CREDENTIALS_FILE):
+    with open(CREDENTIALS_FILE, "w") as _f:
+        _f.write(_creds_env)
+    print(f"[auth] Wrote credentials.json from GOOGLE_CREDENTIALS_JSON env var.")
+
+_token_env = os.getenv("GOOGLE_TOKEN_JSON")
+if _token_env and not os.path.exists(TOKEN_FILE):
+    with open(TOKEN_FILE, "w") as _f:
+        _f.write(_token_env)
+    print(f"[auth] Wrote token.json from GOOGLE_TOKEN_JSON env var.")
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 

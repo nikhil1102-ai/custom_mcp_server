@@ -1,0 +1,57 @@
+# MCP-Style Server — Google Docs & Gmail Integration
+
+Build a complete **MCP-style server** in Python that integrates with **Google Docs** and **Gmail**.
+
+---
+
+## 📁 Project Structure
+
+```
+google-mcp-server/
+├── server.py          → FastAPI app with tool endpoints
+├── auth.py            → Google OAuth authentication
+├── docs_tool.py       → Google Docs tool (append content)
+├── gmail_tool.py      → Gmail tool (create draft)
+├── requirements.txt   → All dependencies
+├── README.md          → Setup and usage instructions
+├── credentials.json   → (NOT committed — downloaded from Google Cloud)
+└── token.json         → (NOT committed — auto-generated after OAuth)
+```
+
+---
+
+## ⚙️ Features to Build
+
+### 1. `server.py`
+
+- Use **FastAPI** + **uvicorn**
+- Create two POST endpoints:
+  - **`POST /append_to_doc`** → accepts `doc_id` and `content`, appends text to a Google Doc
+  - **`POST /create_email_draft`** → accepts `to`, `subject`, `body` and creates a Gmail draft
+- Before executing any action, print the action name and payload in the terminal and ask:
+  > **"Approve? (y/n)"** — only proceed if user types `y`
+
+---
+
+### 2. `auth.py`
+
+- Use **Google OAuth 2.0** with these scopes:
+  - `https://www.googleapis.com/auth/documents`
+  - `https://www.googleapis.com/auth/gmail.compose`
+- Load credentials from `credentials.json`
+- Save token to `token.json` after first login
+- If `token.json` exists, load it directly (skip browser login)
+
+---
+
+### 3. `docs_tool.py`
+
+- **Function:** `append_to_doc(doc_id: str, content: str)`
+- Use Google Docs API to append the provided content to the specified document
+
+---
+
+### 4. `gmail_tool.py`
+
+- **Function:** `create_email_draft(to: str, subject: str, body: str)`
+- Use Gmail API to create a draft email with the given recipient, subject, and body

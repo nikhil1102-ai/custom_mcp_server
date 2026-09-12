@@ -146,6 +146,7 @@ MCP_server/
 ├── docs_tool.py       → Google Docs tool (append content)
 ├── gmail_tool.py      → Gmail tool (create draft)
 ├── requirements.txt   → Python dependencies
+├── Procfile           → Railway deployment config
 ├── README.md          → This file
 ├── .gitignore         → Git ignore rules
 └── docs/
@@ -155,8 +156,112 @@ MCP_server/
 
 ---
 
+## Deploy to Railway
+
+### Prerequisites
+
+- A [Railway](https://railway.app/) account (free tier available)
+- The project pushed to GitHub (see Setup above)
+- Google OAuth `token.json` generated locally (run the server once locally first)
+
+### Step 1: Create a New Project on Railway
+
+1. Go to [railway.app](https://railway.app/) and log in.
+2. Click **"New Project"** → **"Deploy from GitHub Repo"**.
+3. Select your repository: `nikhil1102-ai/custom_mcp_server`.
+4. Railway will auto-detect the `Procfile` and configure the start command.
+
+### Step 2: Configure Environment Variables
+
+In your Railway project dashboard, go to **Variables** and add:
+
+| Variable | Value | Description |
+|---|---|---|
+| `AUTO_APPROVE` | `true` | Auto-approve actions (no terminal in cloud) |
+| `HOST` | `0.0.0.0` | Bind to all interfaces (required by Railway) |
+| `GOOGLE_TOKEN_JSON` | *(contents of token.json)* | OAuth token for Google APIs (see Step 3) |
+
+> **Note:** Railway automatically sets the `PORT` variable — you do **not** need to add it manually.
+
+### Step 3: Set Up Google OAuth Token
+
+Since Railway has no browser for the OAuth consent flow, you must generate `token.json` locally first:
+
+1. **Run the server locally** once:
+   ```bash
+   python server.py
+   ```
+2. **Make any API call** (e.g., append to doc) — this triggers the OAuth browser flow.
+3. **Complete the consent** in your browser — `token.json` is created.
+4. **Copy the token contents:**
+   ```bash
+   # Windows (PowerShell)
+   Get-Content token.json
+
+   # macOS/Linux
+   cat token.json
+   ```
+5. **Paste the entire JSON** into the `GOOGLE_TOKEN_JSON` Railway variable.
+
+> **Alternative:** You can also upload `token.json` and `credentials.json` as Railway volume mounts if your plan supports it.
+
+### Step 4: Handle Credentials in Production
+
+For Railway, the `credentials.json` and `token.json` files need to be provided via environment variables since they can't be committed to git. Update `auth.py` to read from env vars by adding this pattern (optional enhancement):
+
+```python
+import json
+import os
+
+# If GOOGLE_TOKEN_JSON env var is set, write it to token.json on startup
+token_env = os.getenv("GOOGLE_TOKEN_JSON")
+if token_env and not os.path.exists("token.json"):
+    with open("token.json", "w") as f:
+        f.write(token_env)
+```
+
+### Step 5: Deploy
+
+1. **Push your code** to GitHub:
+   ```bash
+   git add .
+   git commit -m "Add Railway deployment support"
+   git push origin main
+   ```
+2. Railway will **auto-deploy** from the `main` branch.
+3. Once deployed, Railway provides a **public URL** like:
+   ```
+   https://your-app-name.up.railway.app
+   ```
+
+### Step 6: Test the Deployed API
+
+```bash
+# Replace with your Railway URL
+curl -X POST https://your-app-name.up.railway.app/append_to_doc \
+  -H "Content-Type: application/json" \
+  -d '{"doc_id": "YOUR_DOC_ID", "content": "Hello from Railway!"}'
+
+curl -X POST https://your-app-name.up.railway.app/create_email_draft \
+  -H "Content-Type: application/json" \
+  -d '{"to": "test@example.com", "subject": "Test", "body": "Deployed!"}'
+```
+
+### Railway Environment Summary
+
+| Setting | Value |
+|---|---|
+| **Start Command** | `uvicorn server:app --host 0.0.0.0 --port $PORT` (from Procfile) |
+| **Build Command** | `pip install -r requirements.txt` (auto-detected) |
+| **Port** | Auto-assigned by Railway via `$PORT` |
+| **Health Check** | `GET /docs` (FastAPI Swagger UI) |
+
+---
+
 ## Security Notes
 
 - `credentials.json` and `token.json` are excluded from version control via `.gitignore`.
 - The server binds to `127.0.0.1` (localhost) by default — it is **not** exposed to the network.
+- On Railway, set `AUTO_APPROVE=true` since there is no terminal for manual approval.
 - Only `documents` and `gmail.compose` OAuth scopes are requested.
+- For production, consider adding API key authentication to protect your endpoints.

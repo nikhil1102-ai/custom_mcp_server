@@ -15,6 +15,7 @@ Run:
 """
 
 import json
+import os
 import sys
 
 import uvicorn
@@ -78,6 +79,12 @@ def request_approval(action_name: str, payload: dict) -> bool:
     print("=" * 60)
     print(json.dumps(payload, indent=2))
     print("=" * 60)
+
+    # In headless/deployed environments (e.g., Railway), auto-approve if configured
+    auto_approve = os.getenv("AUTO_APPROVE", "false").lower() == "true"
+    if auto_approve:
+        print("[server] AUTO_APPROVE is enabled — action approved automatically.")
+        return True
 
     try:
         response = input("Approve? (y/n): ").strip().lower()
@@ -205,6 +212,8 @@ def endpoint_create_email_draft(req: CreateEmailDraftRequest):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print("[server] Starting MCP-Style Server on http://127.0.0.1:8000")
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "127.0.0.1")
+    print(f"[server] Starting MCP-Style Server on http://{host}:{port}")
     print("[server] Press Ctrl+C to stop.\n")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host=host, port=port)

@@ -290,6 +290,7 @@ def endpoint_upload_to_drive(req: UploadToDriveRequest):
         "file_id": result["file_id"],
         "file_url": result["file_url"],
         "shared": result["shared"],
+        "folder_id": result["folder_id"],
     }
 
 

@@ -12,6 +12,7 @@ upload.
 
 import base64
 import io
+import os
 
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -22,6 +23,16 @@ from auth import build_service
 # permission so that email recipients can open it without requesting access.
 # Set to False to keep uploads private to the authenticated account.
 LINK_SHARING_ENABLED = True
+
+# Default destination folder for uploads. Set DRIVE_FOLDER_ID to the folder's
+# ID - the trailing path segment of its Drive URL:
+#   https://drive.google.com/drive/folders/<THIS PART>
+# When unset, files land in the account's Drive root. A folder_id passed in the
+# request overrides this.
+#
+# The drive.file scope is sufficient even for a folder created by hand in the
+# Drive UI, as long as the authenticated account can access it.
+DEFAULT_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "")
 
 
 def upload_to_drive(
@@ -44,8 +55,9 @@ def upload_to_drive(
         filename:    Destination filename in Drive, e.g. "pulse_2026-09-07.pdf".
         content_b64: The file contents, base64-encoded.
         mime_type:   MIME type of the file. Defaults to "application/pdf".
-        folder_id:   Optional Drive folder ID to upload into. When empty the
-                     file lands in the account's Drive root.
+        folder_id:   Optional Drive folder ID to upload into. When empty,
+                     falls back to the DRIVE_FOLDER_ID environment variable,
+                     and failing that the account's Drive root.
 
     Returns:
         A dict containing:
@@ -54,6 +66,7 @@ def upload_to_drive(
           - file_id: The Drive file ID
           - file_url: The shareable webViewLink
           - shared: Whether link sharing was applied
+          - folder_id: The destination folder, or "" for the Drive root
 
     Raises:
         ValueError: If content_b64 is empty or not valid base64.
@@ -72,9 +85,12 @@ def upload_to_drive(
 
     service = build_service("drive", "v3")
 
+    # An explicit request value wins; otherwise use the configured default.
+    destination = folder_id or DEFAULT_FOLDER_ID
+
     file_metadata = {"name": filename}
-    if folder_id:
-        file_metadata["parents"] = [folder_id]
+    if destination:
+        file_metadata["parents"] = [destination]
 
     media = MediaIoBaseUpload(
         io.BytesIO(file_bytes),
@@ -93,7 +109,10 @@ def upload_to_drive(
     )
 
     file_id = uploaded.get("id")
-    print(f"[drive] Uploaded '{filename}' ({len(file_bytes)} bytes) as {file_id}")
+    print(
+        f"[drive] Uploaded '{filename}' ({len(file_bytes)} bytes) as {file_id} "
+        f"into {destination or 'Drive root'}"
+    )
 
     # Grant link access so email recipients can open the file directly.
     shared = False
@@ -113,5 +132,6 @@ def upload_to_drive(
             "webViewLink", f"https://drive.google.com/file/d/{file_id}/view"
         ),
         "shared": shared,
+        "folder_id": destination,
         "api_response": uploaded,
     }

@@ -120,7 +120,7 @@ curl -X POST http://127.0.0.1:8000/create_email_draft \
 | filename    | string | Destination filename, e.g. `pulse_2026-09-07.pdf`    |
 | content_b64 | string | File contents, base64-encoded                        |
 | mime_type   | string | Optional. Defaults to `application/pdf`              |
-| folder_id   | string | Optional Drive folder ID; empty uploads to the root  |
+| folder_id   | string | Optional. Overrides the `DRIVE_FOLDER_ID` env var     |
 
 **Response (200):**
 ```json
@@ -129,9 +129,21 @@ curl -X POST http://127.0.0.1:8000/create_email_draft \
   "message": "File uploaded to Drive.",
   "file_id": "...",
   "file_url": "https://drive.google.com/file/d/.../view",
-  "shared": true
+  "shared": true,
+  "folder_id": "..."
 }
 ```
+
+Set `DRIVE_FOLDER_ID` to keep every upload in one folder instead of the Drive
+root. The ID is the last path segment of the folder's URL:
+
+```
+https://drive.google.com/drive/folders/1V4-pvlYj-pQPLC3rgSsnAcEH9jirQhy6
+                                       ^--------- this is DRIVE_FOLDER_ID
+```
+
+A folder created by hand in the Drive UI works fine with the `drive.file`
+scope, as long as the authenticated account can access it.
 
 Uploaded files are given **"anyone with the link can view"** access so that
 email recipients can open them without requesting permission. Set

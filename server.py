@@ -8,6 +8,7 @@ a human-in-the-loop terminal approval prompt.
 Endpoints:
   POST /append_to_doc       - Append text to a Google Doc
   POST /create_email_draft  - Create a Gmail draft email
+  POST /upload_to_drive     - Upload a file (the weekly PDF) to Google Drive
 
 Run:
   python server.py
@@ -26,6 +27,7 @@ from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 
 from docs_tool import append_to_doc
+from drive_tool import upload_to_drive
 from gmail_tool import create_email_draft
 
 
@@ -60,9 +62,40 @@ class CreateEmailDraftRequest(BaseModel):
     body_html: Optional[str] = None
 
 
+class UploadToDriveRequest(BaseModel):
+    """Request schema for the /upload_to_drive endpoint."""
+    filename: str
+    content_b64: str
+    mime_type: Optional[str] = "application/pdf"
+    folder_id: Optional[str] = ""
+
+
 # ---------------------------------------------------------------------------
 # Human-in-the-Loop Approval
 # ---------------------------------------------------------------------------
+
+
+# Strings longer than this are summarised rather than printed in full, so a
+# base64 PDF payload cannot flood the approval prompt.
+MAX_DISPLAY_CHARS = 400
+
+
+def _redact_for_display(payload: dict) -> dict:
+    """Return a copy of *payload* with oversized string values summarised.
+
+    The approval prompt exists to be read by a human. A base64-encoded PDF is
+    hundreds of kilobytes of noise, so long values are replaced with their
+    length and a short prefix.
+    """
+    redacted = {}
+    for key, value in payload.items():
+        if isinstance(value, str) and len(value) > MAX_DISPLAY_CHARS:
+            redacted[key] = (
+                f"<{len(value)} chars> {value[:80]}..."
+            )
+        else:
+            redacted[key] = value
+    return redacted
 
 
 def request_approval(action_name: str, payload: dict) -> bool:
@@ -80,7 +113,7 @@ def request_approval(action_name: str, payload: dict) -> bool:
     print("\n" + "=" * 60)
     print(f"  ACTION: {action_name}")
     print("=" * 60)
-    print(json.dumps(payload, indent=2))
+    print(json.dumps(_redact_for_display(payload), indent=2))
     print("=" * 60)
 
     # In headless/deployed environments (e.g., Railway), auto-approve if configured
@@ -208,6 +241,55 @@ def endpoint_create_email_draft(req: CreateEmailDraftRequest):
         "status": result["status"],
         "message": result["message"],
         "draft_id": result["draft_id"],
+    }
+
+
+@app.post("/upload_to_drive")
+def endpoint_upload_to_drive(req: UploadToDriveRequest):
+    """
+    Upload a file to Google Drive and return a shareable link.
+
+    Used by the review-pulse pipeline to publish the detailed weekly PDF,
+    whose URL is then linked from the summary email.
+
+    Workflow:
+      1. Print the action name and payload to the terminal (the base64
+         body is summarised, not dumped).
+      2. Prompt the operator for approval (y/n).
+      3. If approved -> call drive_tool.upload_to_drive().
+      4. If rejected -> return 403 Forbidden.
+    """
+    payload = req.model_dump()
+
+    if not request_approval("upload_to_drive", payload):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "status": "rejected",
+                "message": "Action not approved by operator.",
+            },
+        )
+
+    try:
+        result = upload_to_drive(
+            filename=req.filename,
+            content_b64=req.content_b64,
+            mime_type=req.mime_type,
+            folder_id=req.folder_id,
+        )
+    except ValueError as exc:
+        # Malformed base64 or empty payload is a client error, not a 500.
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": str(exc)},
+        )
+
+    return {
+        "status": result["status"],
+        "message": result["message"],
+        "file_id": result["file_id"],
+        "file_url": result["file_url"],
+        "shared": result["shared"],
     }
 
 

@@ -7,8 +7,13 @@ Manages the entire OAuth 2.0 lifecycle:
   - Building authenticated Google API service objects
 
 Scopes:
-  - https://www.googleapis.com/auth/documents   (Google Docs read/write)
+  - https://www.googleapis.com/auth/documents     (Google Docs read/write)
   - https://www.googleapis.com/auth/gmail.compose (Gmail draft creation)
+  - https://www.googleapis.com/auth/drive.file    (upload/manage app-created files)
+
+NOTE: changing SCOPES invalidates an existing token.json. Delete it and re-run
+the consent flow locally, then copy the new token into GOOGLE_TOKEN_JSON on the
+deployment. A stale token produces 403 "insufficient authentication scopes".
 """
 
 import os
@@ -27,6 +32,10 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/gmail.compose",
+    # drive.file grants access only to files this app creates - not the
+    # user's whole Drive - which is the least privilege needed to upload
+    # the report and share it by link.
+    "https://www.googleapis.com/auth/drive.file",
 ]
 
 # Path to the OAuth client secrets file downloaded from Google Cloud Console.

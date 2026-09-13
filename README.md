@@ -1,12 +1,13 @@
-# MCP-Style Server — Google Docs & Gmail Integration
+# MCP-Style Server — Google Docs, Drive & Gmail Integration
 
-A lightweight Python server that exposes Google Docs and Gmail operations as **MCP-style tool endpoints** via FastAPI. Every action requires explicit **human approval** in the terminal before execution.
+A lightweight Python server that exposes Google Docs, Drive and Gmail operations as **MCP-style tool endpoints** via FastAPI. Every action requires explicit **human approval** in the terminal before execution.
 
 ---
 
 ## Features
 
 - **Append to Google Doc** — Append text content to any Google Doc you have access to.
+- **Upload to Google Drive** — Upload a file (e.g. the weekly pulse PDF) and get a shareable link.
 - **Create Gmail Draft** — Create a draft email in your Gmail account.
 - **Human-in-the-Loop** — Every action is printed to the terminal and requires `y/n` approval.
 - **OAuth 2.0** — Secure authentication via Google's OAuth 2.0 flow.
@@ -112,13 +113,40 @@ curl -X POST http://127.0.0.1:8000/create_email_draft \
 { "status": "success", "message": "Content appended to document.", "doc_id": "..." }
 ```
 
+### `POST /upload_to_drive`
+
+| Field       | Type   | Description                                          |
+|-------------|--------|------------------------------------------------------|
+| filename    | string | Destination filename, e.g. `pulse_2026-09-07.pdf`    |
+| content_b64 | string | File contents, base64-encoded                        |
+| mime_type   | string | Optional. Defaults to `application/pdf`              |
+| folder_id   | string | Optional Drive folder ID; empty uploads to the root  |
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "File uploaded to Drive.",
+  "file_id": "...",
+  "file_url": "https://drive.google.com/file/d/.../view",
+  "shared": true
+}
+```
+
+Uploaded files are given **"anyone with the link can view"** access so that
+email recipients can open them without requesting permission. Set
+`LINK_SHARING_ENABLED = False` in `drive_tool.py` to keep uploads private.
+
+The base64 body is summarised (not dumped) in the terminal approval prompt.
+
 ### `POST /create_email_draft`
 
-| Field   | Type   | Description                        |
-|---------|--------|------------------------------------|
-| to      | string | Recipient email address            |
-| subject | string | Email subject line                 |
-| body    | string | Email body text                    |
+| Field     | Type   | Description                        |
+|-----------|--------|------------------------------------|
+| to        | string | Recipient email address            |
+| subject   | string | Email subject line                 |
+| body      | string | Email body text (plain-text)       |
+| body_html | string | Optional rich HTML body            |
 
 **Response (200):**
 ```json
@@ -129,6 +157,7 @@ curl -X POST http://127.0.0.1:8000/create_email_draft \
 
 | Status | Meaning                    |
 |--------|----------------------------|
+| 400    | Malformed payload (e.g. invalid base64) |
 | 403    | Action rejected by operator|
 | 401    | Authentication error       |
 | 422    | Invalid request payload    |
@@ -144,6 +173,7 @@ MCP_server/
 ├── server.py          → FastAPI app with tool endpoints
 ├── auth.py            → Google OAuth 2.0 authentication
 ├── docs_tool.py       → Google Docs tool (append content)
+├── drive_tool.py      → Google Drive tool (upload file, share link)
 ├── gmail_tool.py      → Gmail tool (create draft)
 ├── requirements.txt   → Python dependencies
 ├── Procfile           → Railway deployment config
@@ -259,5 +289,10 @@ curl -X POST https://your-app-name.up.railway.app/create_email_draft \
 - `credentials.json` and `token.json` are excluded from version control via `.gitignore`.
 - The server binds to `127.0.0.1` (localhost) by default — it is **not** exposed to the network.
 - On Railway, set `AUTO_APPROVE=true` since there is no terminal for manual approval.
-- Only `documents` and `gmail.compose` OAuth scopes are requested.
+- Only `documents`, `gmail.compose` and `drive.file` OAuth scopes are requested.
+  `drive.file` grants access solely to files this app creates — never the
+  user's existing Drive contents.
+- **Changing `SCOPES` invalidates an existing `token.json`.** Delete it, re-run
+  the consent flow locally, then update `GOOGLE_TOKEN_JSON` on Railway. A stale
+  token fails with 403 `insufficient authentication scopes`.
 - For production, consider adding API key authentication to protect your endpoints.

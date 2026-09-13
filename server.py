@@ -1,22 +1,23 @@
 """
-server.py — MCP-Style Server (FastAPI + Uvicorn)
+server.py - MCP-Style Server (FastAPI + Uvicorn)
 
 The entry point and orchestrator for the MCP server. Exposes two POST
 endpoints for Google Docs and Gmail tool operations, each gated behind
 a human-in-the-loop terminal approval prompt.
 
 Endpoints:
-  POST /append_to_doc       — Append text to a Google Doc
-  POST /create_email_draft  — Create a Gmail draft email
+  POST /append_to_doc       - Append text to a Google Doc
+  POST /create_email_draft  - Create a Gmail draft email
 
 Run:
   python server.py
-  → Uvicorn starts on http://127.0.0.1:8000
+  - Uvicorn starts on http://127.0.0.1:8000
 """
 
 import json
 import os
 import sys
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -46,7 +47,8 @@ app = FastAPI(
 
 class AppendToDocRequest(BaseModel):
     """Request schema for the /append_to_doc endpoint."""
-    doc_id: str
+    doc_id: Optional[str] = ""
+    title: Optional[str] = "Untitled Document"
     content: str
 
 
@@ -55,6 +57,7 @@ class CreateEmailDraftRequest(BaseModel):
     to: str
     subject: str
     body: str
+    body_html: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -83,14 +86,14 @@ def request_approval(action_name: str, payload: dict) -> bool:
     # In headless/deployed environments (e.g., Railway), auto-approve if configured
     auto_approve = os.getenv("AUTO_APPROVE", "false").lower() == "true"
     if auto_approve:
-        print("[server] AUTO_APPROVE is enabled — action approved automatically.")
+        print("[server] AUTO_APPROVE is enabled - action approved automatically.")
         return True
 
     try:
         response = input("Approve? (y/n): ").strip().lower()
     except EOFError:
         # If stdin is not available (e.g., running in background), reject
-        print("[server] stdin not available — action rejected.")
+        print("[server] stdin not available - action rejected.")
         return False
 
     return response == "y"
@@ -129,7 +132,7 @@ async def auth_error_handler(request, exc: FileNotFoundError):
 
 @app.exception_handler(Exception)
 async def generic_error_handler(request, exc: Exception):
-    """Catch-all handler for unhandled exceptions — returns 500."""
+    """Catch-all handler for unhandled exceptions - returns 500."""
     return JSONResponse(
         status_code=500,
         content={
@@ -153,8 +156,8 @@ def endpoint_append_to_doc(req: AppendToDocRequest):
     Workflow:
       1. Print the action name and payload to the terminal.
       2. Prompt the operator for approval (y/n).
-      3. If approved → call docs_tool.append_to_doc().
-      4. If rejected → return 403 Forbidden.
+      3. If approved -> call docs_tool.append_to_doc().
+      4. If rejected -> return 403 Forbidden.
     """
     payload = req.model_dump()
 
@@ -167,12 +170,13 @@ def endpoint_append_to_doc(req: AppendToDocRequest):
             },
         )
 
-    result = append_to_doc(doc_id=req.doc_id, content=req.content)
+    result = append_to_doc(doc_id=req.doc_id, content=req.content, title=req.title)
 
     return {
         "status": result["status"],
         "message": result["message"],
         "doc_id": result["doc_id"],
+        "doc_url": result.get("doc_url"),
     }
 
 
@@ -184,8 +188,8 @@ def endpoint_create_email_draft(req: CreateEmailDraftRequest):
     Workflow:
       1. Print the action name and payload to the terminal.
       2. Prompt the operator for approval (y/n).
-      3. If approved → call gmail_tool.create_email_draft().
-      4. If rejected → return 403 Forbidden.
+      3. If approved -> call gmail_tool.create_email_draft().
+      4. If rejected -> return 403 Forbidden.
     """
     payload = req.model_dump()
 
@@ -198,7 +202,7 @@ def endpoint_create_email_draft(req: CreateEmailDraftRequest):
             },
         )
 
-    result = create_email_draft(to=req.to, subject=req.subject, body=req.body)
+    result = create_email_draft(to=req.to, subject=req.subject, body=req.body, body_html=req.body_html)
 
     return {
         "status": result["status"],
@@ -208,7 +212,7 @@ def endpoint_create_email_draft(req: CreateEmailDraftRequest):
 
 
 # ---------------------------------------------------------------------------
-# Main — Run with Uvicorn
+# Main - Run with Uvicorn
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
